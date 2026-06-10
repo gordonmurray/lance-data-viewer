@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-10
+
 ### Added
 - LanceDB 0.33.0 support with a matching container image tag. 0.33.0 is now the recommended version and carries the `latest`, `stable`, and `v{version}` tags (#53).
 - API endpoint test suite (pytest + FastAPI TestClient) covering all six endpoints, pagination, column filtering, value serialization, and corrupted-dataset handling. The CI test job now runs it against every supported Lance version (#28).
@@ -17,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `/datasets` uses `list_tables()` on lancedb versions that have it, falling back to the deprecated `table_names()` on older ones (#54).
 
 ### Docs
-- README refresh: corrected the supported-data-types section (variable-length float vectors render fully since #14; no 2048-dimension limit), documented the release image tags from #46, added test suite instructions, made 0.29.2 the recommendation throughout, and linked CONTRIBUTING.md and CHANGELOG.md (#51).
+- README refresh: corrected the supported-data-types section (variable-length float vectors render fully since #14; no 2048-dimension limit), documented the release image tags from #46, added test suite instructions, and linked CONTRIBUTING.md and CHANGELOG.md (#51).
 
 ## [0.2.0] - 2026-04-16
 
