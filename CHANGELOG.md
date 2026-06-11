@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-06-11
+
 ### Changed
 - Maximum rows per page raised from 200 to 1000. The page-size dropdown gains 500 and 1000 options; the default stays at 50 (#58).
 
