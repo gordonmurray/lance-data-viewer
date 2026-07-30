@@ -21,7 +21,7 @@ COPY --from=builder /root/.local /home/appuser/.local
 
 WORKDIR /app
 
-COPY backend/*.py .
+COPY backend/*.py ./
 COPY VERSION .
 COPY docker/entrypoint.sh /app/entrypoint.sh
 COPY web/vanilla/ /web/
