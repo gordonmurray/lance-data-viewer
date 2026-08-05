@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from contextlib import asynccontextmanager
 import os
 import logging
 from pathlib import Path
@@ -29,18 +30,22 @@ def _read_app_version() -> str:
 
 APP_VERSION = _read_app_version()
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Log version information on startup."""
+    logger.info(f"Lance Data Viewer v{APP_VERSION}")
+    logger.info(f"LanceDB: {lancedb.__version__}, PyArrow: {pa.__version__}")
+    logger.info(f"Data path: {DATA_PATH}")
+    yield
+
+
 app = FastAPI(
     title="Lance Data Viewer",
     description="Read-only web viewer for Lance datasets",
     version=APP_VERSION,
+    lifespan=lifespan,
 )
-
-@app.on_event("startup")
-async def startup_event():
-    """Log version information on startup"""
-    logger.info(f"Lance Data Viewer v{APP_VERSION}")
-    logger.info(f"LanceDB: {lancedb.__version__}, PyArrow: {pa.__version__}")
-    logger.info(f"Data path: {DATA_PATH}")
 
 app.add_middleware(
     CORSMiddleware,
