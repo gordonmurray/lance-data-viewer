@@ -1,13 +1,16 @@
 """API endpoint tests, based on docs/spec.md.
 
-Covers /healthz, /datasets, /schema, /columns, /rows (pagination, column
-filtering, serialization), /vector/preview, and the graceful-degradation
-path for unreadable datasets.
+Covers /healthz, /datasets, /metadata, /schema, /columns, /rows (pagination,
+column filtering, serialization), /vector/preview, and the
+graceful-degradation path for unreadable datasets.
 """
 
 import base64
+import inspect
+from types import SimpleNamespace
 
 import lancedb
+import pyarrow as pa
 import pytest
 from packaging.version import parse as parse_version
 
@@ -41,6 +44,55 @@ def test_datasets_lists_created_tables(client):
     names = response.json()["datasets"]
     assert "sample" in names
     assert "broken" in names
+
+
+# /datasets/{name}/metadata
+
+def test_metadata_combines_schema_and_columns(client):
+    response = client.get("/datasets/sample/metadata")
+    assert response.status_code == 200
+    body = response.json()
+    assert {field["name"] for field in body["fields"]} == {
+        "id", "text", "score", "blob", "vec", "embedding"
+    }
+    columns = {column["name"]: column for column in body["columns"]}
+    assert columns["vec"]["is_vector"] is True
+    assert columns["id"]["is_vector"] is False
+
+
+def test_metadata_serializes_utf8_and_binary_schema_metadata(client, monkeypatch):
+    import app as app_module
+
+    schema = pa.schema(
+        [pa.field("id", pa.int64())],
+        metadata={
+            "café".encode(): "naïve".encode(),
+            b"binary": b"\xff\xfe\x01\x02",
+        },
+    )
+    table = SimpleNamespace(schema=schema)
+    db = SimpleNamespace(open_table=lambda _name: table)
+    monkeypatch.setattr(app_module, "get_lance_connection", lambda: db)
+
+    response = client.get("/datasets/sample/metadata")
+    assert response.status_code == 200
+    metadata = response.json()["metadata"]
+    assert metadata["café"] == "naïve"
+    assert metadata["binary"] == base64.b64encode(b"\xff\xfe\x01\x02").decode()
+
+
+def test_dataset_io_handlers_are_synchronous():
+    import app as app_module
+
+    handlers = (
+        app_module.list_datasets,
+        app_module.get_dataset_metadata,
+        app_module.get_dataset_schema,
+        app_module.get_dataset_columns,
+        app_module.get_dataset_rows,
+        app_module.get_vector_preview,
+    )
+    assert all(not inspect.iscoroutinefunction(handler) for handler in handlers)
 
 
 # /datasets/{name}/schema

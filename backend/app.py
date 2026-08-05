@@ -70,6 +70,56 @@ def get_lance_connection():
         raise HTTPException(status_code=500, detail="Data path not found")
     return lancedb.connect(str(DATA_PATH))
 
+
+def serialize_schema_metadata(metadata):
+    """Convert Arrow schema metadata into a JSON-safe dictionary.
+
+    PyArrow exposes schema metadata as bytes keys and values, but JSON requires
+    string keys and values. ``serialize_value`` decodes valid UTF-8 bytes and
+    base64-encodes bytes that cannot be decoded, preventing FastAPI response
+    serialization from raising ``UnicodeDecodeError``.
+    """
+    return {
+        serialize_value(key): serialize_value(value)
+        for key, value in (metadata or {}).items()
+    }
+
+
+def describe_schema(schema):
+    """Build schema and column metadata in one pass."""
+    fields = []
+    columns = []
+    for field in schema:
+        is_vector = (
+            (pa.types.is_list(field.type) or pa.types.is_fixed_size_list(field.type))
+            and pa.types.is_floating(field.type.value_type)
+        )
+        field_info = {
+            "name": field.name,
+            "type": str(field.type),
+            "nullable": field.nullable,
+        }
+        if is_vector:
+            field_info["vector_dim"] = None
+        fields.append(field_info)
+
+        column_info = {
+            "name": field.name,
+            "type": str(field.type),
+            "nullable": field.nullable,
+            "is_vector": is_vector,
+        }
+        if is_vector:
+            column_info["dim"] = None
+        columns.append(column_info)
+
+    return {
+        "fields": fields,
+        "metadata": serialize_schema_metadata(schema.metadata),
+        "columns": columns,
+    }
+
+
 def serialize_arrow_value(value):
     try:
         # Stop immediately if the Arrow scalar is null
@@ -176,7 +226,7 @@ async def health_check():
         return {"ok": False, "error": str(e)}
 
 @app.get("/datasets")
-async def list_datasets():
+def list_datasets():
     try:
         db = get_lance_connection()
         if hasattr(db, "list_tables"):
@@ -191,73 +241,56 @@ async def list_datasets():
         logger.error(f"Error listing datasets: {e}")
         raise HTTPException(status_code=500, detail="Failed to list datasets")
 
-@app.get("/datasets/{dataset_name}/schema")
-async def get_dataset_schema(dataset_name: str):
+
+@app.get("/datasets/{dataset_name}/metadata")
+def get_dataset_metadata(dataset_name: str):
     if not validate_dataset_name(dataset_name):
         raise HTTPException(status_code=400, detail="Invalid dataset name")
 
     try:
         db = get_lance_connection()
         table = db.open_table(dataset_name)
-        schema = table.schema
+        return describe_schema(table.schema)
+    except Exception as e:
+        logger.error(f"Error getting metadata for {dataset_name}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get dataset metadata")
 
-        schema_dict = {
-            "fields": [],
-            "metadata": schema.metadata or {}
+
+@app.get("/datasets/{dataset_name}/schema")
+def get_dataset_schema(dataset_name: str):
+    if not validate_dataset_name(dataset_name):
+        raise HTTPException(status_code=400, detail="Invalid dataset name")
+
+    try:
+        db = get_lance_connection()
+        table = db.open_table(dataset_name)
+        description = describe_schema(table.schema)
+        return {
+            "fields": description["fields"],
+            "metadata": description["metadata"],
         }
-
-        for field in schema:
-            field_info = {
-                "name": field.name,
-                "type": str(field.type),
-                "nullable": field.nullable
-            }
-
-            if (pa.types.is_list(field.type) or pa.types.is_fixed_size_list(field.type)) and pa.types.is_floating(field.type.value_type):
-                field_info["vector_dim"] = None
-
-            schema_dict["fields"].append(field_info)
-
-        return schema_dict
 
     except Exception as e:
         logger.error(f"Error getting schema for {dataset_name}: {e}")
         raise HTTPException(status_code=500, detail="Failed to get dataset schema")
 
 @app.get("/datasets/{dataset_name}/columns")
-async def get_dataset_columns(dataset_name: str):
+def get_dataset_columns(dataset_name: str):
     if not validate_dataset_name(dataset_name):
         raise HTTPException(status_code=400, detail="Invalid dataset name")
 
     try:
         db = get_lance_connection()
         table = db.open_table(dataset_name)
-        schema = table.schema
-
-        columns = []
-        for field in schema:
-            col_info = {
-                "name": field.name,
-                "type": str(field.type),
-                "nullable": field.nullable
-            }
-
-            if (pa.types.is_list(field.type) or pa.types.is_fixed_size_list(field.type)) and pa.types.is_floating(field.type.value_type):
-                col_info["is_vector"] = True
-                col_info["dim"] = None
-            else:
-                col_info["is_vector"] = False
-
-            columns.append(col_info)
-
-        return {"columns": columns}
+        description = describe_schema(table.schema)
+        return {"columns": description["columns"]}
 
     except Exception as e:
         logger.error(f"Error getting columns for {dataset_name}: {e}")
         raise HTTPException(status_code=500, detail="Failed to get dataset columns")
 
 @app.get("/datasets/{dataset_name}/rows")
-async def get_dataset_rows(
+def get_dataset_rows(
     dataset_name: str,
     limit: int = Query(default=50, ge=1, le=MAX_LIMIT),
     offset: int = Query(default=0, ge=0),
@@ -358,7 +391,7 @@ async def get_dataset_rows(
         raise HTTPException(status_code=500, detail="Failed to get dataset rows")
 
 @app.get("/datasets/{dataset_name}/vector/preview")
-async def get_vector_preview(
+def get_vector_preview(
     dataset_name: str,
     column: str,
     limit: int = Query(default=100, le=MAX_LIMIT)

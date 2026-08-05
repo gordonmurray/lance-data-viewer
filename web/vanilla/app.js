@@ -129,78 +129,77 @@ class LanceViewer {
 
         this.currentDataset = datasetName;
         this.currentPage = 0;
+        this.allColumns = [];
+        this.selectedColumns = [];
         this.elements.datasetTitle.textContent = datasetName;
         this.elements.datasetHeader.style.display = 'block';
 
-        await this.loadSchema();
-        await this.loadColumns();
-        await this.loadData();
+        await Promise.all([
+            this.loadMetadata(),
+            this.loadData()
+        ]);
     }
 
-    async loadSchema() {
+    async loadMetadata() {
         try {
-            const response = await fetch(`${this.apiBase}/datasets/${this.currentDataset}/schema`);
+            const response = await fetch(`${this.apiBase}/datasets/${this.currentDataset}/metadata`);
             if (!response.ok) {
                 throw new Error(`API error: ${response.status} ${response.statusText}`);
             }
-            const schema = await response.json();
+            const metadata = await response.json();
+            this.renderSchema(metadata.fields);
+            this.renderColumns(metadata.columns);
+            return true;
+        } catch (error) {
+            this.showError('Failed to load metadata');
+            return false;
+        }
+    }
 
-            this.elements.schemaDisplay.innerHTML = '';
-            schema.fields.forEach(field => {
-                const fieldDiv = document.createElement('div');
-                const isVector = field.type.includes('list<item: double>') || field.type.includes('fixed_size_list<item: float>');
-                fieldDiv.className = isVector ? 'schema-field vector' : 'schema-field';
+    renderSchema(fields) {
+        this.elements.schemaDisplay.innerHTML = '';
+        fields.forEach(field => {
+            const fieldDiv = document.createElement('div');
+            const isVector = field.type.includes('list<item: double>') || field.type.includes('fixed_size_list<item: float>');
+            fieldDiv.className = isVector ? 'schema-field vector' : 'schema-field';
 
-                let typeDisplay;
-                if (isVector) {
-                    // Check if this is a CLIP vector
-                    if (field.type.includes('[512]')) {
-                        typeDisplay = `${field.name}: CLIP vector (512-dim float)`;
-                    } else {
-                        typeDisplay = `${field.name}: vector (${field.type})`;
-                    }
+            let typeDisplay;
+            if (isVector) {
+                // Check if this is a CLIP vector
+                if (field.type.includes('[512]')) {
+                    typeDisplay = `${field.name}: CLIP vector (512-dim float)`;
                 } else {
-                    typeDisplay = `${field.name}: ${field.type}`;
+                    typeDisplay = `${field.name}: vector (${field.type})`;
                 }
+            } else {
+                typeDisplay = `${field.name}: ${field.type}`;
+            }
 
-                fieldDiv.textContent = typeDisplay;
-                this.elements.schemaDisplay.appendChild(fieldDiv);
-            });
+            fieldDiv.textContent = typeDisplay;
+            this.elements.schemaDisplay.appendChild(fieldDiv);
+        });
 
-            this.elements.schemaSection.style.display = 'block';
-        } catch (error) {
-            this.showError('Failed to load schema');
-        }
+        this.elements.schemaSection.style.display = 'block';
     }
 
-    async loadColumns() {
-        try {
-            const response = await fetch(`${this.apiBase}/datasets/${this.currentDataset}/columns`);
-            if (!response.ok) {
-                throw new Error(`API error: ${response.status} ${response.statusText}`);
-            }
-            const data = await response.json();
+    renderColumns(columns) {
+        this.allColumns = columns;
+        this.selectedColumns = columns.map(col => col.name);
 
-            this.allColumns = data.columns;
-            this.selectedColumns = data.columns.map(col => col.name);
+        this.elements.columnSelect.innerHTML = '';
+        columns.forEach(column => {
+            const option = document.createElement('option');
+            option.value = column.name;
+            option.textContent = column.is_vector
+                ? `${column.name} (vector)`
+                : column.name;
+            option.selected = true;
+            this.elements.columnSelect.appendChild(option);
+        });
 
-            this.elements.columnSelect.innerHTML = '';
-            data.columns.forEach(column => {
-                const option = document.createElement('option');
-                option.value = column.name;
-                option.textContent = column.is_vector
-                    ? `${column.name} (vector)`
-                    : column.name;
-                option.selected = true;
-                this.elements.columnSelect.appendChild(option);
-            });
-
-            this.elements.columnSelect.style.display = 'block';
-            this.elements.columnSelect.parentElement.querySelector('.column-controls').style.display = 'flex';
-            this.elements.columnSection.style.display = 'block';
-        } catch (error) {
-            this.showError('Failed to load columns');
-        }
+        this.elements.columnSelect.style.display = 'block';
+        this.elements.columnSelect.parentElement.querySelector('.column-controls').style.display = 'flex';
+        this.elements.columnSection.style.display = 'block';
     }
 
     selectAllColumns() {
@@ -246,10 +245,12 @@ class LanceViewer {
             this.renderTable(data.rows);
             this.updatePagination();
             this.hideLoading();
+            return true;
 
         } catch (error) {
             this.hideLoading();
             this.showError('Failed to load data');
+            return false;
         }
     }
 
