@@ -157,7 +157,7 @@ The API tests run without Docker. With Python 3.11:
 
 ```bash
 pip install -c backend/constraints-0.33.0.txt -r backend/requirements.txt
-pip install pytest "httpx<0.28"
+pip install pytest httpx2
 cd backend && python -m pytest tests/ -v
 ```
 

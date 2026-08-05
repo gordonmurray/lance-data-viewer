@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions pinned to the majors that run on Node 24, before Node 20 leaves the runners (#60).
 - FastAPI startup logging moved from the deprecated `on_event` decorator to a lifespan context manager (#77).
 - Dataset loading now fetches combined schema and column metadata in parallel with row data, reducing four sequential I/O operations to two concurrent requests (#75).
+- FastAPI raised from 0.104.1 to 0.141.1, and the test suite moved from httpx to httpx2. The old FastAPI brought starlette 0.27, which passed an argument that httpx had deprecated, so the test instructions had to hold httpx below 0.28. Test runs are now free of deprecation warnings (#81).
 
 ### Fixed
 - `docker build` no longer fails with "the destination must be a directory and end with a /". `COPY backend/*.py .` needs a trailing slash when it copies more than one file. The classic builder rejected it, the BuildKit builder did not (#62).

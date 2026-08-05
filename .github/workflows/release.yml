@@ -156,9 +156,8 @@ jobs:
         python -m pip install --upgrade pip
         pip install -c backend/constraints-${{ matrix.lancedb }}.txt \
           -r backend/requirements.txt
-        # httpx is required by TestClient; <0.28 keeps the app= kwarg
-        # that the starlette version pinned by fastapi 0.104 still uses
-        pip install pytest "httpx<0.28"
+        # TestClient needs an HTTP client; current starlette wants httpx2
+        pip install pytest httpx2
 
     - name: Run API endpoint tests
       run: |
